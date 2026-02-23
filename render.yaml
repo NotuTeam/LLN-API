@@ -1,0 +1,54 @@
+services:
+  # Web Service - API
+  - type: web
+    name: labalaba-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free # Change to starter, standard, or pro for production
+    healthCheckPath: /
+    envVars:
+      - key: APP_NAME
+        value: LabaLaba-API
+      - key: APP_ENV
+        value: production
+      - key: PORT
+        generateValue: true # Render auto-generates this
+      # Database - Use Render's managed database or external
+      # Uncomment and configure based on your database choice:
+      # - key: DB_DRIVER
+      #   value: postgres
+      # - key: POSTGRES_HOST
+      #   fromDatabase:
+      #     name: labalaba-db
+      #     property: host
+      # - key: POSTGRES_PORT
+      #   fromDatabase:
+      #     name: labalaba-db
+      #     property: port
+      # - key: POSTGRES_USER
+      #   fromDatabase:
+      #     name: labalaba-db
+      #     property: user
+      # - key: POSTGRES_PASSWORD
+      #   fromDatabase:
+      #     name: labalaba-db
+      #     property: password
+      # - key: POSTGRES_DB
+      #   fromDatabase:
+      #     name: labalaba-db
+      #     property: database
+      # Security - Set these in Render Dashboard or use Secret Files:
+      # - key: JWT_SECRET
+      #   generateValue: true
+      # - key: JWT_REFRESH_SECRET
+      #   generateValue: true
+      # - key: GENESIS_PASSWORD
+      #   sync: false # Set manually in dashboard
+
+# Optional: Managed PostgreSQL Database
+# databases:
+#   - name: labalaba-db
+#     databaseName: labalaba
+#     user: labalaba_user
+#     plan: free

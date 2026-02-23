@@ -1,0 +1,27 @@
+# Build artifacts
+*.exe
+server
+bg-api
+tmp/
+
+# Development files
+.env
+.env.local
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# WhatsApp session (should be persisted via volume in production)
+whatsapp-session/
+
+# Data files (for SQLite)
+data/
+*.db
