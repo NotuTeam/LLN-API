@@ -25,3 +25,6 @@ whatsapp-session/
 # Data files (for SQLite)
 data/
 *.db
+
+# Alternative deployment configs
+render.yaml

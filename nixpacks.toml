@@ -1,8 +1,0 @@
-[phases.setup]
-nixPkgs = ["go", "gcc", "musl"]
-
-[phases.build]
-cmds = ["go build -ldflags='-w -s' -o server ./cmd/server"]
-
-[start]
-cmd = "./server"
