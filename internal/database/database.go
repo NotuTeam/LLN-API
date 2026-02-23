@@ -12,7 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -41,10 +40,6 @@ func Connect(cfg *config.DatabaseConfig) (*DB, error) {
 		}
 	case "mysql":
 		if err := db.connectMySQL(cfg); err != nil {
-			return nil, err
-		}
-	case "sqlite":
-		if err := db.connectSQLite(cfg); err != nil {
 			return nil, err
 		}
 	default:
@@ -122,18 +117,6 @@ func (db *DB) connectMySQL(cfg *config.DatabaseConfig) error {
 
 	db.Gorm = gormDB
 	log.Println("✓ Connected to MySQL")
-	return nil
-}
-
-// connectSQLite connects to SQLite
-func (db *DB) connectSQLite(cfg *config.DatabaseConfig) error {
-	gormDB, err := gorm.Open(sqlite.Open(cfg.SQLitePath), &gorm.Config{})
-	if err != nil {
-		return fmt.Errorf("failed to connect to SQLite: %v", err)
-	}
-
-	db.Gorm = gormDB
-	log.Println("✓ Connected to SQLite")
 	return nil
 }
 

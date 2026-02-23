@@ -22,9 +22,5 @@ Thumbs.db
 # WhatsApp session (should be persisted via volume in production)
 whatsapp-session/
 
-# Data files (for SQLite)
-data/
-*.db
-
 # Alternative deployment configs
 render.yaml

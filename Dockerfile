@@ -13,7 +13,7 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
+# Build the binary (CGO disabled, pure Go)
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /server ./cmd/server
 
 # Runtime stage
@@ -27,8 +27,8 @@ RUN apk --no-cache add ca-certificates tzdata
 # Copy binary from builder
 COPY --from=builder /server .
 
-# Create directory for SQLite and WhatsApp session (if needed)
-RUN mkdir -p /app/data /app/whatsapp-session
+# Create directory for WhatsApp session (if needed)
+RUN mkdir -p /app/whatsapp-session
 
 # Expose port (Railway/Render sets PORT env var)
 EXPOSE 8000

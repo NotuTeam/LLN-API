@@ -44,9 +44,6 @@ type DatabaseConfig struct {
 	MySQLUser     string
 	MySQLPassword string
 	MySQLDatabase string
-
-	// SQLite
-	SQLitePath string
 }
 
 type JWTConfig struct {
@@ -117,7 +114,6 @@ func Load() *Config {
 			MySQLUser:        getEnv("MYSQL_USER", "root"),
 			MySQLPassword:    getEnv("MYSQL_PASSWORD", "root"),
 			MySQLDatabase:    getEnv("MYSQL_DATABASE", "bgdb"),
-			SQLitePath:       getEnv("SQLITE_PATH", "./data/bgdb.db"),
 		},
 		JWT: JWTConfig{
 			AccessSecret:    getEnv("JWT_SECRET", "secret"),
