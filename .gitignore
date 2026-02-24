@@ -29,6 +29,8 @@ go.work
 *.swp
 *.swo
 
+*/whatsapp.db
+
 # OS
 .DS_Store
 Thumbs.db
