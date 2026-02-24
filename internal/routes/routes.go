@@ -14,6 +14,9 @@ func SetupRoutes(app *fiber.App) {
 	
 	// Settings handler
 	settingsHandler := handlers.NewSettingsHandler()
+	
+	// Migration handler
+	migrationHandler := handlers.NewMigrationHandler()
 
 	// Health check
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -25,6 +28,14 @@ func SetupRoutes(app *fiber.App) {
 
 	// API v1 routes
 	v1 := app.Group("/api/v1")
+
+	// ============================================
+	// Migration Routes (SUPERADMIN only)
+	// ============================================
+	migration := v1.Group("/migration", middleware.AuthGuard(), middleware.RoleGuard("SUPERADMIN"))
+	migration.Get("/stats", migrationHandler.GetOrderStats)
+	migration.Post("/cleanup-orders", migrationHandler.CleanupOrders)
+	migration.Post("/reset-orders", migrationHandler.ResetOrders)
 
 	// ============================================
 	// Dashboard Routes (Protected)
@@ -45,7 +56,12 @@ func SetupRoutes(app *fiber.App) {
 	authProtected := auth.Group("/", middleware.AuthGuard())
 	authProtected.Get("/me", authHandler.Me)
 	authProtected.Get("/users", middleware.RoleGuard("SUPERADMIN", "ADMIN"), authHandler.ListUsers)
+	authProtected.Get("/list", middleware.RoleGuard("SUPERADMIN", "ADMIN"), authHandler.ListUsers) // Alias for frontend compatibility
 	authProtected.Post("/register", middleware.RoleGuard("SUPERADMIN", "ADMIN"), authHandler.Register)
+	authProtected.Put("/users/:id", middleware.RoleGuard("SUPERADMIN", "ADMIN"), authHandler.UpdateUser)
+	authProtected.Put("/adjust/:id", middleware.RoleGuard("SUPERADMIN", "ADMIN"), authHandler.UpdateUser) // Alias for frontend
+	authProtected.Delete("/users/:id", middleware.RoleGuard("SUPERADMIN", "ADMIN"), authHandler.DeleteUser)
+	authProtected.Delete("/takedown/:id", middleware.RoleGuard("SUPERADMIN", "ADMIN"), authHandler.DeleteUser) // Alias for frontend
 
 	// ============================================
 	// Sales Routes (Protected)

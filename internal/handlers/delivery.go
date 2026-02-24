@@ -184,9 +184,27 @@ func (h *DeliveryHandler) Create(c *fiber.Ctx) error {
 		return response.NotFound(c, "Order not found")
 	}
 
-	// Check order status
-	if order.Status != models.OrderStatusLoading {
-		return response.BadRequest(c, "Order is not in loading status")
+	// Check order status - allow both loading and completed status
+	if order.Status != models.OrderStatusLoading && order.Status != models.OrderStatusCompleted {
+		return response.BadRequest(c, "Order is not ready for delivery note")
+	}
+
+	// Check if delivery note already exists for this order
+	if order.DeliveryNoteID != "" {
+		// Return existing delivery note
+		deliveryCollection := database.GetMongoCollection("delivery_notes")
+		note := &models.DeliveryNote{}
+		noteObjID, _ := primitive.ObjectIDFromHex(order.DeliveryNoteID)
+		err = deliveryCollection.FindOne(ctx, bson.M{"_id": noteObjID}).Decode(note)
+		if err == nil {
+			// Found existing note, return it
+			note.Order = order
+			return response.Success(c, 200, fiber.Map{
+				"delivery_note": note,
+				"order":         order,
+				"exists":        true,
+			})
+		}
 	}
 
 	// Get sales data
@@ -197,31 +215,46 @@ func (h *DeliveryHandler) Create(c *fiber.Ctx) error {
 		salesCollection.FindOne(ctx, bson.M{"_id": salesObjID}).Decode(sales)
 	}
 
-	// Get product data
-	productCollection := database.GetMongoCollection("products")
-	product := &models.Product{}
-	if order.ProductID != "" {
-		productObjID, _ := primitive.ObjectIDFromHex(order.ProductID)
-		productCollection.FindOne(ctx, bson.M{"_id": productObjID}).Decode(product)
+	// Build product names from items array
+	productNames := ""
+	var deliveryItems []models.DeliveryNoteItem
+	if len(order.Items) > 0 {
+		for i, item := range order.Items {
+			if i > 0 {
+				productNames += ", "
+			}
+			productNames += item.ProductName
+			deliveryItems = append(deliveryItems, models.DeliveryNoteItem{
+				ProductName: item.ProductName,
+				Quantity:    item.Quantity,
+				Unit:        item.Unit,
+				UnitPrice:   item.UnitPrice,
+			})
+		}
 	}
 
 	// Create delivery note
 	token := generateDeliveryToken()
+	noteNumber := generateNoteNumber()
+	now := time.Now()
+
 	note := models.NewDeliveryNote()
 	note.OrderID = req.OrderID
-	note.NoteNumber = generateNoteNumber()
+	note.NoteNumber = noteNumber
 	note.Token = token
 	note.CreatedBy = userID
+	note.CreatedAt = now
 
 	// Snapshot data
 	note.SalesName = sales.Name
 	note.SalesPhone = sales.Phone
-	note.ProductName = product.Name
+	note.ProductName = productNames
 	note.ProductQty = order.Quantity
-	note.ProductUnit = product.Unit
+	note.ProductUnit = "pcs"
 	note.DriverName = order.DriverName
 	note.DriverPhone = order.DriverPhone
 	note.VehiclePlate = order.VehiclePlate
+	note.Items = deliveryItems
 
 	// Save delivery note
 	deliveryCollection := database.GetMongoCollection("delivery_notes")
@@ -230,14 +263,16 @@ func (h *DeliveryHandler) Create(c *fiber.Ctx) error {
 		return response.Error(c, 500, "Failed to create delivery note")
 	}
 
-	// Update order
-	now := time.Now()
+	// Update order with delivery note info
 	orderUpdate := bson.M{
-		"delivery_note_id":  note.ID.Hex(),
-		"delivery_note_url": fmt.Sprintf("%s/delivery/%s", config.Cfg.Client.URL, token),
-		"status":            models.OrderStatusCompleted,
-		"completed_at":      now,
-		"updated_at":        now,
+		"delivery_note_id":     note.ID.Hex(),
+		"delivery_note_number": noteNumber,
+		"delivery_note_token":  token,
+		"delivery_note_url":    fmt.Sprintf("%s/delivery/%s", config.Cfg.Client.URL, token),
+		"delivery_note_at":     now,
+		"status":               models.OrderStatusCompleted,
+		"completed_at":         now,
+		"updated_at":           now,
 	}
 
 	_, err = orderCollection.UpdateOne(ctx, bson.M{"_id": orderObjID}, bson.M{"$set": orderUpdate})
@@ -247,13 +282,20 @@ func (h *DeliveryHandler) Create(c *fiber.Ctx) error {
 
 	// Generate WhatsApp notification link
 	notification.Init(config.Cfg.Client.URL)
+
+	// Get first product name for notification
+	firstProductName := ""
+	if len(order.Items) > 0 {
+		firstProductName = order.Items[0].ProductName
+	}
+
 	waLink, _ := notification.SendDeliveryNotification(
 		sales.Phone,
 		sales.Name,
-		note.NoteNumber,
-		product.Name,
+		noteNumber,
+		firstProductName,
 		order.Quantity,
-		product.Unit,
+		"pcs",
 		order.DriverName,
 		order.VehiclePlate,
 		token,
@@ -262,12 +304,12 @@ func (h *DeliveryHandler) Create(c *fiber.Ctx) error {
 	// Check WhatsApp status for frontend
 	waStatus := notification.WhatsAppStatus()
 
-	// Populate order for response
+	// Update note with order reference for response
 	note.Order = order
 
 	return response.Success(c, 201, fiber.Map{
-		"delivery_note":  note,
-		"whatsapp_link":  waLink,
+		"delivery_note":      note,
+		"whatsapp_link":      waLink,
 		"whatsapp_connected": waStatus["logged_in"].(bool),
 		"whatsapp_auto_sent": waStatus["logged_in"].(bool),
 	})

@@ -345,3 +345,113 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		"role":         user.Role,
 	})
 }
+
+// UpdateUser updates a user (admin only)
+func (h *AuthHandler) UpdateUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return response.BadRequest(c, "Invalid user ID")
+	}
+
+	type UpdateRequest struct {
+		Username    string `json:"username"`
+		DisplayName string `json:"display_name"`
+		Password    string `json:"password,omitempty"`
+		Email       string `json:"email,omitempty"`
+		Role        string `json:"role,omitempty"`
+		IsActive    *bool  `json:"is_active,omitempty"`
+	}
+
+	var req UpdateRequest
+	if err := c.BodyParser(&req); err != nil {
+		return response.BadRequest(c, "Invalid request body")
+	}
+
+	collection := database.GetMongoCollection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Build update
+	update := bson.M{"updated_at": time.Now()}
+	if req.Username != "" {
+		// Check if username exists for another user
+		count, _ := collection.CountDocuments(ctx, bson.M{
+			"username": req.Username,
+			"_id":      bson.M{"$ne": objID},
+		})
+		if count > 0 {
+			return response.Error(c, 400, "Username already exists")
+		}
+		update["username"] = req.Username
+	}
+	if req.DisplayName != "" {
+		update["display_name"] = req.DisplayName
+	}
+	if req.Password != "" {
+		hashedPassword, err := crypt.HashPassword(req.Password)
+		if err != nil {
+			return response.Error(c, 500, "Failed to hash password")
+		}
+		update["password"] = hashedPassword
+	}
+	if req.Email != "" {
+		update["email"] = req.Email
+	}
+	if req.Role != "" {
+		update["role"] = req.Role
+	}
+	if req.IsActive != nil {
+		update["is_active"] = *req.IsActive
+	}
+
+	result, err := collection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": update})
+	if err != nil {
+		return response.Error(c, 500, "Failed to update user")
+	}
+	if result.MatchedCount == 0 {
+		return response.NotFound(c, "User not found")
+	}
+
+	return response.Success(c, 200, fiber.Map{
+		"message": "User updated successfully",
+	})
+}
+
+// DeleteUser deletes a user (admin only)
+func (h *AuthHandler) DeleteUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return response.BadRequest(c, "Invalid user ID")
+	}
+
+	collection := database.GetMongoCollection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Check if user exists and is not superadmin
+	var user models.User
+	err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&user)
+	if err != nil {
+		return response.NotFound(c, "User not found")
+	}
+
+	if user.Role == models.RoleSuperAdmin {
+		return response.Error(c, 400, "Cannot delete superadmin")
+	}
+
+	result, err := collection.DeleteOne(ctx, bson.M{"_id": objID})
+	if err != nil {
+		return response.Error(c, 500, "Failed to delete user")
+	}
+	if result.DeletedCount == 0 {
+		return response.NotFound(c, "User not found")
+	}
+
+	return response.Success(c, 200, fiber.Map{
+		"message": "User deleted successfully",
+	})
+}

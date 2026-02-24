@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"bg-go/internal/config"
 	"bg-go/internal/database"
@@ -17,7 +18,7 @@ import (
 )
 
 func init() {
-	// Load .env file
+	// Load .env file (ignore error in production)
 	godotenv.Load()
 }
 
@@ -25,22 +26,25 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
-	// Log environment
-	if cfg.IsDevelopment() {
-		log.Println("Development mode - Hot reload enabled (use 'air')")
-	}
+	log.Printf("Starting %s...", cfg.App.Name)
+	log.Printf("Environment: %s", cfg.App.Env)
+	log.Printf("Port: %s", cfg.App.Port)
+	log.Printf("Database Driver: %s", cfg.Database.Driver)
 
-	// Initialize CDN
+	// Initialize CDN (optional)
 	if err := cloudinary.Init(); err != nil {
 		log.Printf("Warning: Failed to initialize CDN: %v", err)
 	}
 
-	// Connect to database
+	// Connect to database (non-fatal for health check to work)
 	if _, err := database.Connect(&cfg.Database); err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Printf("ERROR: Failed to connect to database: %v", err)
+		// Don't crash - let health check return error status
+	} else {
+		log.Printf("Database connected successfully")
 	}
 
-	// Initialize WhatsApp (optional - won't fail if error)
+	// Initialize WhatsApp (optional)
 	if err := whatsapp.Init(); err != nil {
 		log.Printf("Warning: Failed to initialize WhatsApp: %v", err)
 	} else {
@@ -74,10 +78,15 @@ func main() {
 	})
 
 	// Start server
-	log.Printf("Server running on port %s...", cfg.App.Port)
-	log.Printf("Database: %s", cfg.Database.Driver)
+	log.Printf("Server listening on port %s...", cfg.App.Port)
 
-	if err := app.Listen(":" + cfg.App.Port); err != nil {
+	// Use Render/Railway PORT
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = cfg.App.Port
+	}
+
+	if err := app.Listen(":" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

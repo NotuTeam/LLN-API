@@ -425,7 +425,7 @@ func (h *OrderHandler) GetStats(c *fiber.Ctx) error {
 	})
 }
 
-// FinishLoading marks an order as finished loading
+// FinishLoading marks an order as finished loading and creates delivery note
 func (h *OrderHandler) FinishLoading(c *fiber.Ctx) error {
 	id := c.Params("id")
 
@@ -434,13 +434,13 @@ func (h *OrderHandler) FinishLoading(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid ID format")
 	}
 
-	collection := database.GetMongoCollection("orders")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	orderCollection := database.GetMongoCollection("orders")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Get order
 	order := &models.Order{}
-	err = collection.FindOne(ctx, bson.M{"_id": objID}).Decode(order)
+	err = orderCollection.FindOne(ctx, bson.M{"_id": objID}).Decode(order)
 	if err != nil {
 		return response.NotFound(c, "Order not found")
 	}
@@ -450,15 +450,74 @@ func (h *OrderHandler) FinishLoading(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Order is not in loading status")
 	}
 
-	// Update status
-	now := time.Now()
-	update := bson.M{
-		"status":       models.OrderStatusCompleted,
-		"completed_at": now,
-		"updated_at":   now,
+	// Get sales data
+	salesCollection := database.GetMongoCollection("sales")
+	sales := &models.Sales{}
+	if order.SalesID != "" {
+		salesObjID, _ := primitive.ObjectIDFromHex(order.SalesID)
+		salesCollection.FindOne(ctx, bson.M{"_id": salesObjID}).Decode(sales)
 	}
 
-	result, err := collection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": update})
+	// Build product names from items array
+	productNames := ""
+	var deliveryItems []models.DeliveryNoteItem
+	if len(order.Items) > 0 {
+		for i, item := range order.Items {
+			if i > 0 {
+				productNames += ", "
+			}
+			productNames += item.ProductName
+			deliveryItems = append(deliveryItems, models.DeliveryNoteItem{
+				ProductName: item.ProductName,
+				Quantity:    item.Quantity,
+				Unit:        item.Unit,
+				UnitPrice:   item.UnitPrice,
+			})
+		}
+	}
+
+	// Create delivery note
+	token := generateToken(16)
+	noteNumber := generateNoteNumber()
+	now := time.Now()
+
+	note := models.NewDeliveryNote()
+	note.OrderID = id
+	note.NoteNumber = noteNumber
+	note.Token = token
+	note.CreatedAt = now
+
+	// Snapshot data
+	note.SalesName = sales.Name
+	note.SalesPhone = sales.Phone
+	note.ProductName = productNames
+	note.ProductQty = order.Quantity
+	note.ProductUnit = "pcs"
+	note.DriverName = order.DriverName
+	note.DriverPhone = order.DriverPhone
+	note.VehiclePlate = order.VehiclePlate
+	note.Items = deliveryItems
+
+	// Save delivery note
+	deliveryCollection := database.GetMongoCollection("delivery_notes")
+	_, err = deliveryCollection.InsertOne(ctx, note)
+	if err != nil {
+		return response.Error(c, 500, "Failed to create delivery note")
+	}
+
+	// Update order with delivery note info and completed status
+	orderUpdate := bson.M{
+		"delivery_note_id":     note.ID.Hex(),
+		"delivery_note_number": noteNumber,
+		"delivery_note_token":  token,
+		"delivery_note_url":    fmt.Sprintf("%s/delivery/%s", config.Cfg.Client.URL, token),
+		"delivery_note_at":     now,
+		"status":               models.OrderStatusCompleted,
+		"completed_at":         now,
+		"updated_at":           now,
+	}
+
+	result, err := orderCollection.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": orderUpdate})
 	if err != nil {
 		return response.Error(c, 500, "Failed to finish loading")
 	}
@@ -466,8 +525,13 @@ func (h *OrderHandler) FinishLoading(c *fiber.Ctx) error {
 		return response.NotFound(c, "Order not found")
 	}
 
+	// Get updated order
+	orderCollection.FindOne(ctx, bson.M{"_id": objID}).Decode(order)
+
 	return response.Success(c, 200, fiber.Map{
-		"message": "Loading finished successfully",
+		"message":            "Loading finished successfully",
+		"delivery_note":      note,
+		"order":              order,
 	})
 }
 

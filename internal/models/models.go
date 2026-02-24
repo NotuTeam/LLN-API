@@ -178,9 +178,12 @@ type Order struct {
 	LoadingFinishedAt *time.Time `json:"loading_finished_at,omitempty" bson:"loading_finished_at,omitempty"`
 
 	// Delivery Info
-	DeliveryNoteID  string     `json:"delivery_note_id,omitempty" bson:"delivery_note_id,omitempty"`
-	DeliveryNoteURL string     `json:"delivery_note_url,omitempty" bson:"delivery_note_url,omitempty"`
-	CompletedAt     *time.Time `json:"completed_at,omitempty" bson:"completed_at,omitempty"`
+	DeliveryNoteID     string     `json:"delivery_note_id,omitempty" bson:"delivery_note_id,omitempty"`
+	DeliveryNoteNumber string     `json:"delivery_note_number,omitempty" bson:"delivery_note_number,omitempty"`
+	DeliveryNoteToken  string     `json:"delivery_note_token,omitempty" bson:"delivery_note_token,omitempty"`
+	DeliveryNoteURL    string     `json:"delivery_note_url,omitempty" bson:"delivery_note_url,omitempty"`
+	DeliveryNoteAt     *time.Time `json:"delivery_note_at,omitempty" bson:"delivery_note_at,omitempty"`
+	CompletedAt        *time.Time `json:"completed_at,omitempty" bson:"completed_at,omitempty"`
 }
 
 // NewOrder creates a new Order instance
@@ -205,8 +208,8 @@ type DeliveryNote struct {
 	BaseModel `bson:",inline"`
 
 	// Reference
-	OrderID string  `json:"order_id" bson:"order_id"`
-	Order   *Order  `json:"order,omitempty" bson:"order,omitempty"`
+	OrderID string `json:"order_id" bson:"order_id"`
+	Order   *Order `json:"order,omitempty" bson:"order,omitempty"`
 
 	// Note Info
 	NoteNumber string `json:"note_number" bson:"note_number"`
@@ -214,18 +217,29 @@ type DeliveryNote struct {
 	// Snapshot Data (for historical purposes)
 	SalesName    string `json:"sales_name" bson:"sales_name"`
 	SalesPhone   string `json:"sales_phone" bson:"sales_phone"`
-	ProductName  string `json:"product_name" bson:"product_name"`
+	ProductName  string `json:"product_name" bson:"product_name"` // Legacy - first product or all products
 	ProductQty   int    `json:"product_qty" bson:"product_qty"`
 	ProductUnit  string `json:"product_unit" bson:"product_unit"`
 	DriverName   string `json:"driver_name" bson:"driver_name"`
 	DriverPhone  string `json:"driver_phone" bson:"driver_phone"`
 	VehiclePlate string `json:"vehicle_plate" bson:"vehicle_plate"`
 
+	// Items (multiple products support)
+	Items []DeliveryNoteItem `json:"items,omitempty" bson:"items,omitempty"`
+
 	// Access Token
 	Token string `json:"token" bson:"token"`
 
 	// Created By
 	CreatedBy string `json:"created_by" bson:"created_by"`
+}
+
+// DeliveryNoteItem represents an item in a delivery note
+type DeliveryNoteItem struct {
+	ProductName string  `json:"product_name" bson:"product_name"`
+	Quantity    int     `json:"quantity" bson:"quantity"`
+	Unit        string  `json:"unit" bson:"unit"`
+	UnitPrice   float64 `json:"unit_price" bson:"unit_price"`
 }
 
 // NewDeliveryNote creates a new DeliveryNote instance
